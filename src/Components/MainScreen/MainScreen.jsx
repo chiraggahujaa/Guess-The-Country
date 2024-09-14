@@ -2,24 +2,18 @@ import { useEffect, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import "./MainScreen.css";
 import axios from "axios";
-import { Box, Button, Input } from "@chakra-ui/react";
-
-const MapUpdater = ({ center }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (center) {
-      map.setView(center);
-    }
-  }, [center, map]);
-  return null;
-};
+import { Box, Button, Input, useToast } from "@chakra-ui/react";
+import { DisplayMap } from "../Map/DisplayMap";
+import { useShowToast } from "../../helper/showToast";
+import { getResult } from "../../helper/getResult";
 
 export const MainScreen = () => {
   const [countries, setCountries] = useState([]);
   const [randomCountry, setRandomCountry] = useState(null);
   const [guessedCountry, setGuessedCountry] = useState("");
   const [guessedCapital, setGuessedCapital] = useState("");
-  const [noOfTrails, setNoOfTrails] = useState(0);
+  const [trailsLeft, setTrailsLeft] = useState(3);
+  const showToast = useShowToast();
 
   useEffect(() => {
     axios.get("https://restcountries.com/v3.1/all").then((res) => {
@@ -41,6 +35,7 @@ export const MainScreen = () => {
     });
 
     console.log("countriesList[index]", countriesList[index]);
+    clearInput();
   };
 
   const handleGuessedCountryInputChange = (e) => {
@@ -52,72 +47,113 @@ export const MainScreen = () => {
   };
 
   const onSubmit = () => {
-    if (
-      guessedCountry.toLowerCase() === randomCountry?.name.common.toLowerCase()
-    ) {
-      alert("Correct!");
+    const { countryMatch, cityMatch } = getResult(
+      randomCountry,
+      guessedCountry,
+      guessedCapital
+    );
+
+    if (countryMatch && cityMatch) {
+      showToast(
+        "Correct!",
+        "You guessed both the country and the capital correctly.",
+        "success",
+        10000,
+        true
+      );
+      setTrailsLeft(3);
       if (countries.length > 0) {
         changeCountry(countries);
       } else {
-        alert("No more countries left!");
+        showToast("Game Over", "No more countries left!", "info", 3000, true);
+      }
+    } else if (countryMatch) {
+      setTrailsLeft((prev) => prev - 1);
+      if (trailsCheck()) {
+        showToast(
+          "Almost there!",
+          "You guessed the country correctly but the capital is incorrect.",
+          "warning",
+          10000,
+          true
+        );
+      }
+    } else if (cityMatch) {
+      setTrailsLeft((prev) => prev - 1);
+      if (trailsCheck()) {
+        showToast(
+          "Almost there!",
+          "You guessed the capital correctly but the country is incorrect.",
+          "warning",
+          10000,
+          true
+        );
       }
     } else {
-      setNoOfTrails((prev) => prev + 1);
-      if(noOfTrails < 3)
-        alert(`Incorrect! You have ${3 - noOfTrails} trails left.`);
-      else{
-        changeCountry(countries);
-        alert("Wrong");
-      }      
-      
+      setTrailsLeft((prev) => prev - 1);
+      if (trailsCheck()) {
+        showToast(
+          "Incorrect",
+          `You have ${trailsLeft} trails left.`,
+          "warning",
+          10000,
+          true
+        );
+      }
     }
   };
 
+  const clearInput = () => {
+    setGuessedCountry("");
+    setGuessedCapital("");
+  };
+
+  const trailsCheck = () => {
+    if (trailsLeft <= 0) {
+      changeCountry(countries);
+      showToast(
+        "Wrong",
+        "You have no trails left. Moving to the next country.",
+        "error",
+        10000,
+        true
+      );
+      setTrailsLeft(3);
+      return false;
+    }
+    return true;
+  };
+
   return (
-    <div>
-      <Box>Random Country : {randomCountry?.name?.common}</Box>
-      <Box>Random Country : {randomCountry?.capital[0]}</Box>
-      <Input
-        placeholder="Guess the country ..."
-        value={guessedCountry}
-        onChange={handleGuessedCountryInputChange}
-        width="800px"
-      />
-      <Input
-        placeholder="Guess the capital ..."
-        value={guessedCapital}
-        onChange={handleGuessedCapitalInputChange}
-        width="800px"
-      />
-      <Button colorScheme="blue" size="md" onClick={onSubmit}>
-        Submit
-      </Button>
-      <Box
-        p={2}
-        border="1px"
-        borderColor="gray.200"
-        height={"90vh"}
-        width={"90vw"}
-        overflow="hidden"
-      >
-        <MapContainer
-          center={randomCountry?.capitalInfo?.latlng || [0, 0]}
-          zoom={13}
-        >
-          <MapUpdater center={randomCountry?.capitalInfo?.latlng || [0, 0]} />
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png"
+    <div className="flex flex-col items-center">
+      <div className="flex">
+        <div className="mr-2">
+          Random Country : {randomCountry?.name?.common},
+        </div>
+        <div className="mr-2">Random Capital : {randomCountry?.capital[0]}</div>
+        <div>Trails : {trailsLeft}</div>
+      </div>
+      <div className="flex flex-col p-2 items-center">
+        <div className="p-2 flex">
+          <Input
+            placeholder="Guess the country ..."
+            value={guessedCountry}
+            onChange={handleGuessedCountryInputChange}
+            width="30vw"
+            className="mr-2"
           />
-          {randomCountry?.capitalInfo?.latlng && (
-            <Marker position={randomCountry.capitalInfo.latlng}>
-              <Popup>
-                A pretty CSS3 popup. <br /> Easily customizable.
-              </Popup>
-            </Marker>
-          )}
-        </MapContainer>
-      </Box>
+          <Input
+            placeholder="Guess the capital ..."
+            value={guessedCapital}
+            onChange={handleGuessedCapitalInputChange}
+            width="30vw"
+          />
+        </div>
+        <Button colorScheme="blue" size="md" onClick={onSubmit} width="15vw">
+          Submit
+        </Button>
+      </div>
+      <DisplayMap randomCountry={randomCountry} />
     </div>
   );
 };
